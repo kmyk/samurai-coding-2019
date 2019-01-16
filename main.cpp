@@ -45,6 +45,7 @@ inline vec2 make_vec2(int y, int x) { return (vec2) { y, x }; }
 inline vec2 operator + (vec2 const & a, vec2 const & b) { return make_vec2(a.y + b.y, a.x + b.x); }
 inline vec2 operator - (vec2 const & a, vec2 const & b) { return make_vec2(a.y - b.y, a.x - b.x); }
 inline vec2 operator * (int a, vec2 const & b) { return make_vec2(a * b.y, a * b.x); }
+inline vec2 & operator += (vec2 & a, vec2 const & b) { a.y += b.y; a.x += b.x; return a; }
 inline int   dot(vec2 const & a, vec2 const & b) { return a.x * b.x + a.y * b.y; }
 inline int cross(vec2 const & a, vec2 const & b) { return a.x * b.y - a.y * b.x; }
 inline int ccw(vec2 const & a, vec2 const & b, vec2 const & c) { ll z = cross(b - a, c - a); return z > 0 ? 1 : z < 0 ? -1 : 0; }
@@ -261,6 +262,12 @@ vector<vector<int> > get_dist_bfs(vector<vector<cell_t> > const & field) {
  * AI class
  ******************************************************************************/
 
+struct state_t {
+    jockey_t jockey;
+    output_t output;
+    double score;
+};
+
 class ai_t {
     const config_t config;
 
@@ -270,40 +277,64 @@ public:
     }
 
     output_t operator () (input_t const & input) {
-        auto may_conflict = [&](jockey_t const & a) {
-            REP3 (fy, -1, 2) {
-                REP3 (fx, -1, 2) {
-                    jockey_t b = input.jockey[1];
-                    b.v = b.v + make_vec2(fy, fx);
-                    if (not will_move(b, input.field)) continue;
-                    if (not resolve_confliction(a, b).first) {
-                        return true;
+        auto dist = get_dist_bfs(input.field);
+        auto get_dist = [&](vec2 const & p) {
+            return (p.y >= config.height ? 0 : dist[p.y][p.x]);
+        };
+        auto updated_jockey = [&](jockey_t a, vec2 const & f) {
+            a.v += f;
+            if (not will_move(a, input.field)) {
+                a.v = make_vec2(0, 0);
+            } else {
+                a.p += a.v;
+                if (a.p.y < config.height and input.field[a.p.y][a.p.x] == WATER) {
+                    a.v = make_vec2(0, 0);
+                }
+            }
+            return a;
+        };
+
+        vector<state_t> cur, prv;
+        REP3 (fy, -1, 2) {
+            REP3 (fx, -1, 2) {
+                state_t a;
+                a.output.f = make_vec2(fy, fx);
+                a.jockey = updated_jockey(input.jockey[0], a.output.f);
+                a.score = - get_dist(a.jockey.p);
+                cur.emplace_back(a);
+            }
+        }
+        REP (iteration, 4) {
+            cur.swap(prv);
+            cur.clear();
+            for (auto const & a : prv) {
+                REP3 (fy, -1, 2) {
+                    REP3 (fx, -1, 2) {
+                        state_t b;
+                        b.output = a.output;
+                        b.jockey = updated_jockey(a.jockey, make_vec2(fy, fx));
+                        b.score = - get_dist(b.jockey.p) + 0.1 * a.score;
+                        cur.emplace_back(b);
                     }
                 }
             }
-            return false;
-        };
-        auto dist = get_dist_bfs(input.field);
-
-        output_t output = {};
-        int highscore = INT_MIN;
-        REP3 (fy, -1, 2) {
-            REP3 (fx, -1, 2) {
-                jockey_t a = input.jockey[0];
-                a.v = a.v + make_vec2(fy, fx);
-                if (fy == 0 and fx == 0 and a.v == make_vec2(0, 0)) continue;
-                if (not will_move(a, input.field)) continue;
-                bool conflicted = may_conflict(a);
-                if (conflicted) continue;
-                vec2 np = a.p + a.v;
-                int score = - (np.y >= config.height ? 0 : dist[np.y][np.x]) - conflicted;
-                if (score > highscore) {
-                    highscore = score;
-                    output.f = make_vec2(fy, fx);
-                }
+            sort(ALL(cur), [&](auto const & a, auto const & b) {
+                return a.score > b.score;
+            });
+            cur.swap(prv);
+            cur.clear();
+            unordered_set<int> used;
+            for (auto const & a : prv) {
+                int hash_p = a.jockey.p.y * config.width + a.jockey.p.x;
+                int hash_v = (a.jockey.v.y + 20) * 40 + (a.jockey.v.x + 20);
+                int hash = hash_p + config.width * (config.height + 10) * hash_v;
+                if (used.count(hash)) continue;
+                used.insert(hash);
+                cur.push_back(a);
+                if (cur.size() >= 100) break;
             }
         }
-        return output;
+        return cur.front().output;
     }
 };
 
