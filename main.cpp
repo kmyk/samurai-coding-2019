@@ -209,6 +209,55 @@ pair<bool, bool> resolve_confliction(jockey_t const & a, jockey_t const & b) {
 
 
 /*******************************************************************************
+ * 評価関数
+ ******************************************************************************/
+
+vector<vector<int> > get_dist_bfs(vector<vector<cell_t> > const & field) {
+    int height = field.size();
+    int width = field.front().size();
+    vector<vector<int> > dist(height, vector<int>(width, INT_MAX));
+    queue<vec2> que;
+    {  // initialize queue
+        int ly = 0;
+        while (ly < height and field[ly].front() != UNKNOWN) ++ ly;
+        if (ly == height) {
+            REP (x, width) {
+                if (field[height - 1][x] != WALL) {
+                    dist[height - 1][x] = 1;
+                    que.push(make_vec2(height - 1, x));
+                }
+            }
+        } else {
+            REP3 (y, ly, height) {
+                REP (x, width) {
+                    dist[y][x] = height - y;
+                }
+            }
+            REP (x, width) {
+                que.push(make_vec2(ly, x));
+            }
+        }
+    }
+    while (not que.empty()) {
+        vec2 p = que.front();
+        que.pop();
+        static const int dy[4] = { -1, 1, 0, 0 };
+        static const int dx[4] = { 0, 0, 1, -1 };
+        REP (i, 4) {
+            vec2 np = p + make_vec2(dy[i], dx[i]);
+            if (0 <= np.y and np.y < height and 0 <= np.x and np.x < width) {
+                if (field[np.y][np.x] != WALL and dist[np.y][np.x] == INT_MAX) {
+                    dist[np.y][np.x] = dist[p.y][p.x] + 1;
+                    que.push(np);
+                }
+            }
+        }
+    }
+    return dist;
+}
+
+
+/*******************************************************************************
  * AI class
  ******************************************************************************/
 
@@ -234,6 +283,7 @@ public:
             }
             return false;
         };
+        auto dist = get_dist_bfs(input.field);
 
         output_t output = {};
         int highscore = INT_MIN;
@@ -245,7 +295,8 @@ public:
                 if (not will_move(a, input.field)) continue;
                 bool conflicted = may_conflict(a);
                 if (conflicted) continue;
-                double score = fy - (conflicted ? 0.5 : 0);
+                vec2 np = a.p + a.v;
+                int score = - (np.y >= config.height ? 0 : dist[np.y][np.x]) - conflicted;
                 if (score > highscore) {
                     highscore = score;
                     output.f = make_vec2(fy, fx);
