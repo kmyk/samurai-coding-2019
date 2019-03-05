@@ -7,6 +7,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <queue>
 #include <set>
@@ -266,7 +267,80 @@ struct state_t {
     jockey_t jockey;
     output_t output;
     double score;
+    shared_ptr<state_t> parent;
 };
+
+vector<output_t> run_beam_search(config_t const & config, input_t const & input, bool player, int depth) {
+    auto dist = get_dist_bfs(input.field);
+    auto get_dist = [&](vec2 const & p) {
+        return (p.y >= config.height ? 0 : dist[p.y][p.x]);
+    };
+    auto updated_jockey = [&](jockey_t a) {
+        if (not will_move(a, input.field)) {
+            a.v = make_vec2(0, 0);
+        } else {
+            a.p += a.v;
+            if (a.p.y < config.height and input.field[a.p.y][a.p.x] == WATER) {
+                a.v = make_vec2(0, 0);
+            }
+        }
+        return a;
+    };
+
+    vector<shared_ptr<state_t> > cur, prv;
+    REP3 (fy, -1, 2) {
+        REP3 (fx, -1, 2) {
+            auto a = make_shared<state_t>();
+            a->output.f = make_vec2(fy, fx);
+            a->jockey = input.jockey[player];
+            a->jockey.v += a->output.f;
+            a->jockey = updated_jockey(a->jockey);
+            a->score = - get_dist(a->jockey.p);
+            a->parent = nullptr;
+            cur.push_back(a);
+        }
+    }
+    REP (iteration, depth) {
+        cur.swap(prv);
+        cur.clear();
+        for (auto const & a : prv) {
+            REP3 (fy, -1, 2) {
+                REP3 (fx, -1, 2) {
+                    auto b = make_shared<state_t>();
+                    b->output.f = make_vec2(fy, fx);
+                    b->jockey = a->jockey;
+                    b->jockey.v += b->output.f;
+                    b->jockey = updated_jockey(b->jockey);
+                    b->score = - get_dist(b->jockey.p) + 0.1 * a->score;
+                    b->parent = a;
+                    cur.push_back(b);
+                }
+            }
+        }
+        sort(ALL(cur), [&](auto const & a, auto const & b) {
+            return a->score > b->score;
+        });
+        cur.swap(prv);
+        cur.clear();
+        unordered_set<int> used;
+        for (auto const & a : prv) {
+            int hash_p = a->jockey.p.y * config.width + a->jockey.p.x;
+            int hash_v = (a->jockey.v.y + 20) * 40 + (a->jockey.v.x + 20);
+            int hash = hash_p + config.width * (config.height + 10) * hash_v;
+            if (used.count(hash)) continue;
+            used.insert(hash);
+            cur.push_back(a);
+            if (cur.size() >= 100) break;
+        }
+    }
+
+    vector<output_t> outputs;
+    for (auto a = cur.front(); a; a = a->parent) {
+        outputs.push_back(a->output);
+    }
+    reverse(ALL(outputs));
+    return outputs;
+}
 
 class ai_t {
     const config_t config;
@@ -277,64 +351,7 @@ public:
     }
 
     output_t operator () (input_t const & input) {
-        auto dist = get_dist_bfs(input.field);
-        auto get_dist = [&](vec2 const & p) {
-            return (p.y >= config.height ? 0 : dist[p.y][p.x]);
-        };
-        auto updated_jockey = [&](jockey_t a, vec2 const & f) {
-            a.v += f;
-            if (not will_move(a, input.field)) {
-                a.v = make_vec2(0, 0);
-            } else {
-                a.p += a.v;
-                if (a.p.y < config.height and input.field[a.p.y][a.p.x] == WATER) {
-                    a.v = make_vec2(0, 0);
-                }
-            }
-            return a;
-        };
-
-        vector<state_t> cur, prv;
-        REP3 (fy, -1, 2) {
-            REP3 (fx, -1, 2) {
-                state_t a;
-                a.output.f = make_vec2(fy, fx);
-                a.jockey = updated_jockey(input.jockey[0], a.output.f);
-                a.score = - get_dist(a.jockey.p);
-                cur.emplace_back(a);
-            }
-        }
-        REP (iteration, 4) {
-            cur.swap(prv);
-            cur.clear();
-            for (auto const & a : prv) {
-                REP3 (fy, -1, 2) {
-                    REP3 (fx, -1, 2) {
-                        state_t b;
-                        b.output = a.output;
-                        b.jockey = updated_jockey(a.jockey, make_vec2(fy, fx));
-                        b.score = - get_dist(b.jockey.p) + 0.1 * a.score;
-                        cur.emplace_back(b);
-                    }
-                }
-            }
-            sort(ALL(cur), [&](auto const & a, auto const & b) {
-                return a.score > b.score;
-            });
-            cur.swap(prv);
-            cur.clear();
-            unordered_set<int> used;
-            for (auto const & a : prv) {
-                int hash_p = a.jockey.p.y * config.width + a.jockey.p.x;
-                int hash_v = (a.jockey.v.y + 20) * 40 + (a.jockey.v.x + 20);
-                int hash = hash_p + config.width * (config.height + 10) * hash_v;
-                if (used.count(hash)) continue;
-                used.insert(hash);
-                cur.push_back(a);
-                if (cur.size() >= 100) break;
-            }
-        }
-        return cur.front().output;
+        return run_beam_search(config, input, false, 4).front();
     }
 };
 
