@@ -267,10 +267,11 @@ struct state_t {
     jockey_t jockey;
     output_t output;
     double score;
+    int conflict;
     shared_ptr<state_t> parent;
 };
 
-vector<output_t> run_beam_search(config_t const & config, input_t const & input, bool player, int depth) {
+vector<output_t> run_beam_search(config_t const & config, input_t const & input, bool player, int depth, vector<output_t> const & rival_outputs) {
     auto dist = get_dist_bfs(input.field);
     auto get_dist = [&](vec2 const & p) {
         return (p.y >= config.height ? 0 : dist[p.y][p.x]);
@@ -278,15 +279,35 @@ vector<output_t> run_beam_search(config_t const & config, input_t const & input,
     auto updated_jockey = [&](jockey_t a) {
         if (not will_move(a, input.field)) {
             a.v = make_vec2(0, 0);
-        } else {
-            a.p += a.v;
-            if (a.p.y < config.height and input.field[a.p.y][a.p.x] == WATER) {
-                a.v = make_vec2(0, 0);
-            }
+            return a;
+        }
+        a.p += a.v;
+        if (a.p.y < config.height and input.field[a.p.y][a.p.x] == WATER) {
+            a.v = make_vec2(0, 0);
         }
         return a;
     };
+    auto updated_jockey_with_rival = [&](jockey_t a, jockey_t const & rival) {
+        if (not will_move(a, input.field)) {
+            a.v = make_vec2(0, 0);
+            return make_pair(a, -1);
+        }
+        bool p, q; tie(p, q) = resolve_confliction(a, rival);
+        if (not p) {
+            a.v = make_vec2(0, 0);
+            return make_pair(a, -1);
+        }
+        a.p += a.v;
+        if (a.p.y < config.height and input.field[a.p.y][a.p.x] == WATER) {
+            a.v = make_vec2(0, 0);
+        }
+        return make_pair(a, q ? 0 : +1);
+    };
 
+    auto rival = input.jockey[not player];
+    if (not rival_outputs.empty()) {
+        rival.v += rival_outputs.front().f;
+    }
     vector<shared_ptr<state_t> > cur, prv;
     REP3 (fy, -1, 2) {
         REP3 (fx, -1, 2) {
@@ -294,13 +315,22 @@ vector<output_t> run_beam_search(config_t const & config, input_t const & input,
             a->output.f = make_vec2(fy, fx);
             a->jockey = input.jockey[player];
             a->jockey.v += a->output.f;
-            a->jockey = updated_jockey(a->jockey);
-            a->score = - get_dist(a->jockey.p);
+            if (not rival_outputs.empty()) {
+                tie(a->jockey, a->conflict) = updated_jockey_with_rival(a->jockey, rival);
+            } else {
+                a->jockey = updated_jockey(a->jockey);
+                a->conflict = 0;
+            }
+            a->score = - get_dist(a->jockey.p) + 3 * a->conflict;
             a->parent = nullptr;
             cur.push_back(a);
         }
     }
     REP (iteration, depth) {
+        if (iteration + 1 < rival_outputs.size()) {
+            rival = updated_jockey(rival);
+            rival.v += rival_outputs.front().f;
+        }
         cur.swap(prv);
         cur.clear();
         for (auto const & a : prv) {
@@ -310,8 +340,13 @@ vector<output_t> run_beam_search(config_t const & config, input_t const & input,
                     b->output.f = make_vec2(fy, fx);
                     b->jockey = a->jockey;
                     b->jockey.v += b->output.f;
-                    b->jockey = updated_jockey(b->jockey);
-                    b->score = - get_dist(b->jockey.p) + 0.1 * a->score;
+                    if (iteration + 1 < rival_outputs.size() and not a->conflict) {
+                        tie(b->jockey, b->conflict) = updated_jockey_with_rival(b->jockey, rival);
+                    } else {
+                        b->jockey = updated_jockey(b->jockey);
+                        b->conflict = a->conflict;
+                    }
+                    b->score = - 0.9 * get_dist(b->jockey.p) + 0.1 * a->score + (a->conflict ? 0 : 3 * b->conflict);
                     b->parent = a;
                     cur.push_back(b);
                 }
@@ -351,7 +386,12 @@ public:
     }
 
     output_t operator () (input_t const & input) {
-        return run_beam_search(config, input, false, 4).front();
+        vector<output_t> rival_outputs;
+        if (input.jockey[true].p.y < config.height) {
+            rival_outputs = run_beam_search(config, input, true, 2, vector<output_t>());
+        }
+        auto outputs = run_beam_search(config, input, false, 4, rival_outputs);
+        return outputs.front();
     }
 };
 
