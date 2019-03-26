@@ -93,3 +93,13 @@
 -   決勝の形式は「1戦のみのトーナメント」だった。決勝の中継の盛り上りを考えるとこうしたくはなるが、参加者のやる気や結果への納得感にかなり大きく影響するのでやめてほしい。参加者としては「16人の総当たりを134回やって累計2010試合の勝率で判定」などを希望したいが、中継の都合を考えると「9試合して5本先取のトーナメント」などが妥当な折衷案であるように思う。
 
 (不満を多く書いてしまったように思いますが、少なくとも私は楽しかったです。ありがとうございました。)
+
+## リンク
+
+-   [決勝で使用されたレースコースについて - SamurAI Coding 2018-19](https://samuraicoding.info/about-final-racecourses-jp.html)
+-   [SamurAI Coding 2018-19 参戦記 - Taiyo 技術メモ](https://taiyo.qrunch.io/entries/07ironwMNeYAl71b)
+-   [momongaclub/SamurAIcoding_2018-2019](https://github.com/momongaclub/SamurAIcoding_2018-2019)
+-   [Nyashiki/SamurAI-Coding-2018-2019](https://github.com/Nyashiki/SamurAI-Coding-2018-2019)
+-   [johnnyhibiki/samurai2019](https://github.com/johnnyhibiki/samurai2019)
+-   <https://gitlab.com/hinhi/samurai-2019>
+-   <https://twitter.com/a3VtYQo/lists/samurai-coding-2019>
